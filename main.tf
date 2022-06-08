@@ -36,12 +36,8 @@ module "networking" {
   availability_zones   = local.availability_zones
 }
 
-resource "aws_ecr_repository" "todoEcr" {
-  name = "todo-repo"
-}
-
-resource "aws_ecs_cluster" "todoCluster" {
-  name = "todo-cluster"
+resource "aws_ecs_cluster" "cluster" {
+  name = "my-sample"
 }
 
 data "aws_iam_policy_document" "ecs_tasks_execution_role" {
@@ -64,8 +60,8 @@ resource "aws_iam_role_policy_attachment" "ecs_tasks_execution_role" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-resource "aws_ecs_task_definition" "todoServiceDef" {
-  family                   = "todo-service-def"
+resource "aws_ecs_task_definition" "servicedef" {
+  family                   = "my-sample"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   # Available configs: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
@@ -74,10 +70,8 @@ resource "aws_ecs_task_definition" "todoServiceDef" {
   execution_role_arn = aws_iam_role.ecs_tasks_execution_role.arn
   container_definitions = jsonencode([
     {
-      name  = "todo"
-      image = "663360383186.dkr.ecr.eu-central-1.amazonaws.com/todo-repo:latest"
-
-
+      name  = "my-sample"
+      image = "nginx"
       portMappings = [
         {
           containerPort = 80
@@ -88,94 +82,86 @@ resource "aws_ecs_task_definition" "todoServiceDef" {
   ])
 }
 
-resource "aws_lb" "todoALB" {
-  name               = "todo-alb"
+resource "aws_lb" "loadbalancer" {
+  name               = "my-sample"
   internal           = true
   load_balancer_type = "application"
-  #   security_groups    = [aws_security_group.lb_sg.id]
   security_groups = module.networking.security_groups_ids
-  #   subnets            = [for subnet in module.networking.private_subnets_id : subnet.id]
   subnets = module.networking.private_subnets_id[0]
 }
 
-resource "aws_lb_target_group" "todoTargetGroup" {
-  name        = "todo-tg"
+resource "aws_lb_target_group" "target_group" {
+  name        = "my-sample"
   port        = 80
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = module.networking.vpc_id
 }
 
-resource "aws_lb_listener" "front_end" {
-  load_balancer_arn = aws_lb.todoALB.arn
+resource "aws_lb_listener" "lb_listener" {
+  load_balancer_arn = aws_lb.loadbalancer.arn
   port              = "80"
   protocol          = "HTTP"
-  #   ssl_policy        = "ELBSecurityPolicy-2016-08"
-  #   certificate_arn   = "arn:aws:iam::187416307283:server-certificate/test_cert_rab3wuqwgja25ct3n4jdj2tzu4"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.todoTargetGroup.arn
+    target_group_arn = aws_lb_target_group.target_group.arn
   }
 }
 
-resource "aws_ecs_service" "todo" {
-  name            = "todo"
-  cluster         = aws_ecs_cluster.todoCluster.id
-  task_definition = aws_ecs_task_definition.todoServiceDef.arn
+resource "aws_ecs_service" "ecs_service" {
+  name            = "my-sample"
+  cluster         = aws_ecs_cluster.cluster.id
+  task_definition = aws_ecs_task_definition.servicedef.arn
   desired_count   = 1
   launch_type     = "FARGATE"
   network_configuration {
     subnets         = module.networking.private_subnets_id[0]
     security_groups = module.networking.security_groups_ids
   }
-  #   iam_role        = aws_iam_role.foo.arn
-  #   depends_on      = [aws_iam_role_policy.foo]
-
   load_balancer {
-    target_group_arn = aws_lb_target_group.todoTargetGroup.arn
-    container_name   = "todo"
+    target_group_arn = aws_lb_target_group.target_group.arn
+    container_name   = "my-sample"
     container_port   = 80
   }
 }
 
-resource "aws_apigatewayv2_api" "sample_http_api" {
-  name          = "sample-http-api-1"
+resource "aws_apigatewayv2_api" "http_api" {
+  name          = "my-sample"
   protocol_type = "HTTP"
   disable_execute_api_endpoint = true # to ensure clients are calling only via custom domain
 }
 
 resource "aws_apigatewayv2_vpc_link" "vpc_link" {
-  name               = "sample-vpc-link-1"
+  name               = "my-sample"
   security_group_ids = module.networking.security_groups_ids
   subnet_ids         = module.networking.private_subnets_id[0]
 }
 
-resource "aws_apigatewayv2_integration" "sample_private_integration" {
-  api_id           = aws_apigatewayv2_api.sample_http_api.id
-  description      = "Example with a load balancer"
+resource "aws_apigatewayv2_integration" "private_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
   integration_type = "HTTP_PROXY"
-  integration_uri  = aws_lb_listener.front_end.arn
+  integration_uri  = aws_lb_listener.lb_listener.arn
 
   integration_method = "ANY"
   connection_type    = "VPC_LINK"
   connection_id      = aws_apigatewayv2_vpc_link.vpc_link.id
 }
 
-resource "aws_apigatewayv2_route" "sample_route" {
-  api_id    = aws_apigatewayv2_api.sample_http_api.id
+resource "aws_apigatewayv2_route" "route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
   route_key = "ANY /{proxy+}"
 
-  target = "integrations/${aws_apigatewayv2_integration.sample_private_integration.id}"
+  target = "integrations/${aws_apigatewayv2_integration.private_integration.id}"
 }
 
-resource "aws_apigatewayv2_stage" "simple_deploy_stage" {
-  api_id      = aws_apigatewayv2_api.sample_http_api.id
+resource "aws_apigatewayv2_stage" "stage" {
+  api_id      = aws_apigatewayv2_api.http_api.id
   name        = "$default"
   auto_deploy = true
 }
 
-resource "aws_apigatewayv2_domain_name" "sample_custom_domain" {
+resource "aws_apigatewayv2_domain_name" "custom_domain" {
   domain_name = local.domain_name
 
   domain_name_configuration {
@@ -189,8 +175,8 @@ resource "aws_apigatewayv2_domain_name" "sample_custom_domain" {
   }
 }
 
-resource "aws_apigatewayv2_api_mapping" "sample_api_mapping" {
-  api_id      = aws_apigatewayv2_api.sample_http_api.id
-  domain_name = aws_apigatewayv2_domain_name.sample_custom_domain.id
-  stage       = aws_apigatewayv2_stage.simple_deploy_stage.id
+resource "aws_apigatewayv2_api_mapping" "api_mapping" {
+  api_id      = aws_apigatewayv2_api.http_api.id
+  domain_name = aws_apigatewayv2_domain_name.custom_domain.id
+  stage       = aws_apigatewayv2_stage.stage.id
 }
