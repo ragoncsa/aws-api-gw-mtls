@@ -11,6 +11,8 @@
 
 ## Build the infrastructure
 
+Edit terraform.tfvars and configure your domain, your server certificate and your trust store's location. Then
+
 ```shell
 $ source get-credentials.sh
 $ terraform init
@@ -29,3 +31,11 @@ Configure your DNS to point to the regional endpoint AWS API Gateway provided fo
   "type": "CNAME"
 }
 ```
+
+## To test
+
+```shell
+curl -k --key key-for-mtls.pem --cert cert-for-mtls.pem https://api.example.com/
+```
+
+where `key-for-mtls.pem` is the private key you created for the client, `cert-for-mtls.pem` is the client certificate and `api.example.com` is your custom domain.
