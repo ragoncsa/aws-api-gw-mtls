@@ -2,27 +2,22 @@ variable "service_name" {
   description = "An identifier to use for various resources."
 }
 
-variable "region" {
-  description = "eu-central-1"
+variable "security_groups_ids" {
+  type        = list
+  description = "Security groups to use for the load balancer."
 }
 
-variable "environment" {
-  description = "The Deployment environment"
+variable "private_subnets_ids" {
+  type        = list
+  description = "Private subnets to deploy the service and the load balancer to."
 }
 
-//Networking
-variable "vpc_cidr" {
-  description = "The CIDR block of the vpc"
+variable "vpc_id" {
+  description = "The VPC to use."
 }
 
-variable "public_subnets_cidr" {
-  type        = list(any)
-  description = "The CIDR block for the public subnet"
-}
-
-variable "private_subnets_cidr" {
-  type        = list(any)
-  description = "The CIDR block for the private subnet"
+variable "loadbalancer_dns" {
+  description = "The DNS of the loadbalancer."
 }
 
 variable "domain_name" {
