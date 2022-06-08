@@ -19,6 +19,10 @@ Variables used across all modules
 ======*/
 locals {
   availability_zones = ["${var.region}a", "${var.region}b", "${var.region}c"]
+
+  domain_name = var.domain_name
+  certificate_arn = var.certificate_arn
+  truststore_uri = var.truststore_uri
 }
 
 module "networking" {
@@ -138,6 +142,7 @@ resource "aws_ecs_service" "todo" {
 resource "aws_apigatewayv2_api" "sample_http_api" {
   name          = "sample-http-api-1"
   protocol_type = "HTTP"
+  disable_execute_api_endpoint = true # to ensure clients are calling only via custom domain
 }
 
 resource "aws_apigatewayv2_vpc_link" "vpc_link" {
@@ -168,4 +173,24 @@ resource "aws_apigatewayv2_stage" "simple_deploy_stage" {
   api_id      = aws_apigatewayv2_api.sample_http_api.id
   name        = "$default"
   auto_deploy = true
+}
+
+resource "aws_apigatewayv2_domain_name" "sample_custom_domain" {
+  domain_name = local.domain_name
+
+  domain_name_configuration {
+    certificate_arn = local.certificate_arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+
+  mutual_tls_authentication {
+      truststore_uri = local.truststore_uri
+  }
+}
+
+resource "aws_apigatewayv2_api_mapping" "sample_api_mapping" {
+  api_id      = aws_apigatewayv2_api.sample_http_api.id
+  domain_name = aws_apigatewayv2_domain_name.sample_custom_domain.id
+  stage       = aws_apigatewayv2_stage.simple_deploy_stage.id
 }
